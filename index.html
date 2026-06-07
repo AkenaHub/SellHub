@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-black text-white selection:bg-white/20 selection:text-white">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SellHub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['Space Grotesk', 'monospace'],
+                    },
+                    boxShadow: {
+                        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+                        'glow': '0 0 20px rgba(255, 255, 255, 0.1)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+        
+        .tab-line {
+            transform: scaleX(0);
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-origin: center;
+        }
+        .tab-btn:hover .tab-line,
+        .tab-btn.active .tab-line { transform: scaleX(1); }
+
+        #mouse-glow {
+            transform: translate(-50%, -50%);
+            will-change: left, top;
+        }
+
+        .tab-panel { transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
+        .tab-panel.hidden-state {
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+        }
+        .tab-panel.active-state { opacity: 1; transform: translateY(0); }
+    </style>
+</head>
+<body class="h-full font-sans overflow-x-hidden relative">
+
+    <canvas id="starfield" class="fixed inset-0 w-full h-full pointer-events-none z-0 bg-black"></canvas>
+    
+    <div id="mouse-glow" class="fixed pointer-events-none w-[350px] h-[350px] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0)_70%)] z-10 transition-transform duration-75"></div>
+
+    <header class="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.08] bg-black/40 backdrop-blur-md shadow-glass">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 cursor-pointer group" onclick="switchTab('login')">
+                <span class="font-mono text-xl font-bold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-white to-neutral-400">SellHub</span>
+            </div>
+
+            <nav class="flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.06] p-1 rounded-xl shadow-inner">
+                <button id="tab-login-btn" onclick="switchTab('login')" class="tab-btn active relative px-4 py-2 text-sm font-medium transition-all duration-200 hover:text-white text-white rounded-lg focus:outline-none">
+                    <span class="relative z-10 flex items-center gap-2">
+                        <i class="fa-solid fa-user-astronaut text-xs opacity-75"></i>
+                        <span id="login-tab-label">Login</span>
+                    </span>
+                    <span class="tab-line absolute bottom-0 left-2 right-2 h-[2px] bg-white rounded-full"></span>
+                </button>
+
+                <button id="tab-create-btn" onclick="switchTab('create')" class="tab-btn relative px-4 py-2 text-sm font-medium transition-all duration-200 hover:text-white text-neutral-400 rounded-lg focus:outline-none">
+                    <span class="relative z-10 flex items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles text-xs opacity-75"></i>
+                        <span>Create</span>
+                        <i id="create-lock-icon" class="fa-solid fa-lock text-[10px] text-neutral-500 ml-0.5"></i>
+                    </span>
+                    <span class="tab-line absolute bottom-0 left-2 right-2 h-[2px] bg-white rounded-full"></span>
+                </button>
+
+                <button id="tab-dashboard-btn" onclick="switchTab('dashboard')" class="tab-btn relative px-4 py-2 text-sm font-medium transition-all duration-200 hover:text-white text-neutral-400 rounded-lg focus:outline-none">
+                    <span class="relative z-10 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-simple text-xs opacity-75"></i>
+                        <span>Dashboard</span>
+                        <i id="dashboard-lock-icon" class="fa-solid fa-lock text-[10px] text-neutral-500 ml-0.5"></i>
+                    </span>
+                    <span class="tab-line absolute bottom-0 left-2 right-2 h-[2px] bg-white rounded-full"></span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3"></div>
+
+    <main class="relative z-20 max-w-7xl mx-auto px-6 pt-28 pb-16 min-h-screen flex items-center justify-center">
+
+        <section id="panel-login" class="tab-panel active-state w-full max-w-md">
+            <div class="bg-white/[0.02] border border-white/[0.08] backdrop-blur-xl rounded-2xl p-8 shadow-glass relative overflow-hidden group">
+                <div class="absolute -top-16 -right-16 w-32 h-32 bg-white/[0.02] rounded-full blur-2xl group-hover:bg-white/[0.04] transition-all duration-700"></div>
+                
+                <div class="text-center mb-8">
+                    <div class="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/[0.1] flex items-center justify-center mx-auto mb-4 shadow-lg">
+                        <i class="fa-solid fa-cube text-xl text-neutral-300"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold tracking-tight text-white mb-2">Welcome to SellHub</h2>
+                    <p class="text-sm text-neutral-400">Sign in to manage your account.</p>
+                </div>
+
+                <div id="auth-logged-out" class="space-y-4">
+                    <button onclick="handleGitHubLogin()" class="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-neutral-200 transition-all duration-300 font-medium py-3 px-4 rounded-xl shadow-lg hover:shadow-white/10 active:scale-[0.98]">
+                        <i class="fa-brands fa-github text-xl"></i>
+                        <span>Sign in with GitHub</span>
+                    </button>
+                </div>
+
+                <div id="auth-logged-in" class="hidden space-y-6">
+                    <div class="flex items-center gap-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                        <img id="user-avatar" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=150&auto=format&fit=crop" class="w-12 h-12 rounded-full border border-white/20 object-cover" alt="User Avatar">
+                        <div>
+                            <div class="flex items-center gap-1.5">
+                                <h3 id="user-name" class="font-bold text-white text-sm">Developer</h3>
+                                <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">PRO</span>
+                            </div>
+                            <p id="user-username" class="text-xs text-neutral-400">@github_user</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 text-center">
+                        <div class="p-3 rounded-lg bg-white/[0.01] border border-white/[0.04]">
+                            <span class="block text-xs text-neutral-400">Status</span>
+                            <span class="text-sm font-semibold text-emerald-400">Connected</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-white/[0.01] border border-white/[0.04]">
+                            <span class="block text-xs text-neutral-400">Plan</span>
+                            <span class="text-sm font-semibold text-white">Unlimited</span>
+                        </div>
+                    </div>
+
+                    <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 transition-all duration-300 font-medium py-3 px-4 rounded-xl active:scale-[0.98]">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-sm"></i>
+                        <span>Sign Out</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section id="panel-create" class="tab-panel hidden-state hidden w-full max-w-4xl">
+            <div class="bg-white/[0.02] border border-white/[0.08] backdrop-blur-xl rounded-2xl p-6 lg:p-8 shadow-glass">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/[0.08] pb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
+                            <i class="fa-solid fa-wand-magic-sparkles text-neutral-400"></i>
+                            <span>Create Listing</span>
+                        </h2>
+                        <p class="text-sm text-neutral-400 mt-1">Add a new product to your store.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                    <div class="lg:col-span-3 space-y-6">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">Product Name</label>
+                            <input type="text" id="asset-name" placeholder="E.g. Starter Bundle" class="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all duration-200">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">Details</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] text-neutral-500 mb-1">Category</label>
+                                    <select id="asset-category" class="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-neutral-300 focus:outline-none focus:border-white/30 transition-all duration-200">
+                                        <option value="software">Software</option>
+                                        <option value="ebook">E-Book</option>
+                                        <option value="assets">Digital Assets</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-neutral-500 mb-1">Price</label>
+                                    <select id="asset-price" class="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-neutral-300 focus:outline-none focus:border-white/30 transition-all duration-200">
+                                        <option value="free">Free</option>
+                                        <option value="tier1">$10.00</option>
+                                        <option value="tier2">$25.00</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">Description</label>
+                            <textarea id="asset-desc" rows="4" placeholder="Enter product details..." class="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all duration-200 resize-none"></textarea>
+                        </div>
+
+                        <div class="pt-2">
+                            <button onclick="triggerAssetCreation()" class="w-full bg-white hover:bg-neutral-200 text-black font-semibold py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98]">
+                                <i class="fa-solid fa-plus text-sm"></i>
+                                <span>Create Product</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 flex flex-col justify-between p-5 rounded-2xl bg-white/[0.01] border border-white/[0.06] relative overflow-hidden group">
+                        <div class="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent pointer-events-none"></div>
+                        
+                        <div>
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-xs font-semibold uppercase tracking-wider text-neutral-400">Preview</span>
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            </div>
+                            
+                            <div class="h-44 rounded-xl bg-black border border-white/5 flex items-center justify-center relative overflow-hidden">
+                                <div class="absolute inset-0 opacity-25 bg-[radial-gradient(ellipse_at_center,rgba(168,85,247,0.3)_0%,transparent_70%)]"></div>
+                                <div id="preview-orb" class="w-14 h-14 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-500 to-white shadow-glow relative animate-bounce duration-[3000ms] flex items-center justify-center">
+                                    <div class="w-12 h-12 rounded-full bg-black/80 backdrop-blur-sm flex items-center justify-center">
+                                        <i class="fa-solid fa-box text-xs text-neutral-400"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 space-y-2">
+                            <div class="flex justify-between text-xs border-b border-white/[0.05] pb-2">
+                                <span class="text-neutral-500">Status</span>
+                                <span class="text-neutral-300 font-mono">Draft</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Visibility</span>
+                                <span class="text-emerald-400 font-medium">Public</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="panel-dashboard" class="tab-panel hidden-state hidden w-full max-w-5xl">
+            <div class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div class="bg-white/[0.02] border border-white/[0.08] backdrop-blur-xl rounded-2xl p-6 shadow-glass relative overflow-hidden">
+                        <div class="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+                            <i class="fa-solid fa-dollar-sign text-purple-400"></i>
+                        </div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-neutral-400">Revenue</p>
+                        <h3 class="text-3xl font-bold text-white mt-2 font-mono">$4,280</h3>
+                        <div class="mt-4 flex items-center gap-1.5 text-xs text-emerald-400">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                            <span>+12% this week</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white/[0.02] border border-white/[0.08] backdrop-blur-xl rounded-2xl p-6 shadow-glass relative overflow-hidden">
+                        <div class="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+                            <i class="fa-solid fa-box text-blue-400"></i>
+                        </div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-neutral-400">Active Listings</p>
+                        <h3 class="text-3xl font-bold text-white mt-2 font-mono">12</h3>
+                        <div class="mt-4 flex items-center gap-1.5 text-xs text-emerald-400">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                            <span>+2 new products</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white/[0.02] border border-white/[0.08] backdrop-blur-xl rounded-2xl p-6 shadow-glass relative overflow-hidden">
+                        <div class="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+                            <i class="fa-solid fa-users text-emerald-400"></i>
+                        </div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-neutral-400">Views</p>
+                        <h3 class="text-3xl font-bold text-white mt-2 font-mono">8,902</h3>
+                        <div class="mt-4 flex items-center gap-1.5 text-xs text-neutral-400">
+                            <i class="fa-solid fa-minus text-neutral-400"></i>
+                            <span>Consistent traffic</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <div class="lg:col-span-3 bg-white/[0.02] border border-white/[0.08] backdrop-blur-xl rounded-2xl p-6 shadow-glass">
+                        <div class="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 class="text-lg font-bold">Sales Overview</h3>
+                                <p class="text-xs text-neutral-400">Revenue generated over time.</p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button class="px-2.5 py-1 text-[11px] font-medium bg-white/10 rounded-md border border-white/10 hover:bg-white/20 transition-all">7 Days</button>
+                                <button class="px-2.5 py-1 text-[11px] font-medium text-neutral-400 hover:text-white transition-all">30 Days</button>
+                            </div>
+                        </div>
+                        
+                        <div class="relative h-60 w-full flex items-end">
+                            <svg class="w-full h-full text-white/5" viewBox="0 0 100 50" preserveAspectRatio="none">
+                                <line x1="0" y1="10" x2="100" y2="10" stroke="rgba(255,255,255,0.04)" stroke-width="0.3" />
+                                <line x1="0" y1="20" x2="100" y2="20" stroke="rgba(255,255,255,0.04)" stroke-width="0.3" />
+                                <line x1="0" y1="30" x2="100" y2="30" stroke="rgba(255,255,255,0.04)" stroke-width="0.3" />
+                                <line x1="0" y1="40" x2="100" y2="40" stroke="rgba(255,255,255,0.04)" stroke-width="0.3" />
+                                
+                                <path d="M0,45 Q15,10 30,35 T60,15 T90,30 T100,5" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1" stroke-linecap="round"></path>
+                                <path d="M0,45 Q15,10 30,35 T60,15 T90,30 T100,5 L100,50 L0,50 Z" fill="url(#chart-grad)" opacity="0.05"></path>
+                                
+                                <defs>
+                                    <linearGradient id="chart-grad" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="white"></stop>
+                                        <stop offset="100%" stop-color="black"></stop>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <div class="absolute top-[25%] left-[55%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer">
+                                <div class="bg-white text-black px-2 py-1 rounded text-[10px] font-bold font-mono shadow-xl relative z-10">
+                                    $145
+                                </div>
+                                <div class="w-0.5 h-16 bg-gradient-to-b from-white to-transparent"></div>
+                                <div class="w-2.5 h-2.5 rounded-full bg-white border-2 border-black animate-ping -mt-1"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center mt-4 text-[10px] text-neutral-500 font-mono">
+                            <span>Mon</span>
+                            <span>Wed</span>
+                            <span>Fri</span>
+                            <span>Sun</span>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-white/[0.02] border border-white/[0.08] backdrop-blur-xl rounded-2xl p-6 shadow-glass flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-4 pb-2 border-b border-white/[0.06]">
+                                <h3 class="text-sm font-bold flex items-center gap-1.5">
+                                    <i class="fa-solid fa-list-check text-neutral-400"></i>
+                                    <span>Recent Activity</span>
+                                </h3>
+                            </div>
+                            
+                            <div id="logs-container" class="space-y-3 max-h-56 overflow-y-auto pr-1">
+                                <div class="flex items-start gap-2 text-xs">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5"></span>
+                                    <div class="flex-1">
+                                        <p class="text-neutral-300">New purchase: Starter Bundle</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-2 text-xs">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5"></span>
+                                    <div class="flex-1">
+                                        <p class="text-neutral-300">Product updated</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 mt-4 border-t border-white/[0.06] flex items-center justify-between">
+                            <button onclick="clearSystemLogs()" class="text-[11px] text-neutral-400 hover:text-white transition-all font-medium">Clear Activity</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        let authState = {
+            isLoggedIn: false,
+            user: null
+        };
+
+        const mockUsers = [
+            { name: "John Doe", username: "johndoe", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop" },
+            { name: "Jane Smith", username: "janesmith", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=150&auto=format&fit=crop" }
+        ];
+
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let colorClasses = 'border-white/10 bg-black/60 text-white';
+            let icon = '<i class="fa-solid fa-circle-info text-blue-400"></i>';
+            
+            if (type === 'success') {
+                colorClasses = 'border-emerald-500/20 bg-emerald-950/20 text-emerald-300';
+                icon = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+            } else if (type === 'warning') {
+                colorClasses = 'border-amber-500/20 bg-amber-950/20 text-amber-300';
+                icon = '<i class="fa-solid fa-triangle-exclamation text-amber-400"></i>';
+            } else if (type === 'error') {
+                colorClasses = 'border-red-500/20 bg-red-950/20 text-red-300';
+                icon = '<i class="fa-solid fa-circle-exclamation text-red-400"></i>';
+            }
+
+            toast.className = `flex items-center gap-3 border ${colorClasses} backdrop-blur-xl rounded-xl px-4 py-3 shadow-glass max-w-sm transform translate-y-2 opacity-0 transition-all duration-300`;
+            toast.innerHTML = `
+                ${icon}
+                <div class="text-xs font-medium leading-normal">${message}</div>
+                <button onclick="this.parentElement.remove()" class="ml-auto text-neutral-400 hover:text-white focus:outline-none">
+                    <i class="fa-solid fa-xmark text-[10px]"></i>
+                </button>
+            `;
+
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 4500);
+        }
+
+        function handleGitHubLogin() {
+            showNotification("Connecting...", "info");
+            
+            const enableRealOAuth = false;
+            if (enableRealOAuth) {
+                window.location.href = "https://github.com/login/oauth/authorize?client_id=YOUR_CLIENT_ID_HERE&scope=user";
+                return;
+            }
+
+            const selectedUser = mockUsers[Math.floor(Math.random() * mockUsers.length)];
+            
+            setTimeout(() => {
+                authState.isLoggedIn = true;
+                authState.user = selectedUser;
+                
+                document.getElementById('auth-logged-out').classList.add('hidden');
+                document.getElementById('auth-logged-in').classList.remove('hidden');
+                
+                document.getElementById('user-name').innerText = selectedUser.name;
+                document.getElementById('user-username').innerText = `@${selectedUser.username}`;
+                document.getElementById('user-avatar').src = selectedUser.avatar;
+                
+                document.getElementById('login-tab-label').innerText = "Account";
+                
+                document.getElementById('create-lock-icon').classList.add('hidden');
+                document.getElementById('dashboard-lock-icon').classList.add('hidden');
+
+                showNotification(`Signed in as @${selectedUser.username}.`, "success");
+                addSystemLog(`User logged in.`);
+
+                setTimeout(() => {
+                    switchTab('create');
+                }, 1000);
+
+            }, 1500);
+        }
+
+        function handleLogout() {
+            authState.isLoggedIn = false;
+            authState.user = null;
+            
+            document.getElementById('auth-logged-out').classList.remove('hidden');
+            document.getElementById('auth-logged-in').classList.add('hidden');
+            
+            document.getElementById('login-tab-label').innerText = "Login";
+            
+            document.getElementById('create-lock-icon').classList.remove('hidden');
+            document.getElementById('dashboard-lock-icon').classList.remove('hidden');
+
+            showNotification("Signed out.", "warning");
+            addSystemLog("User logged out.");
+            
+            switchTab('login');
+        }
+
+        let tabTimeouts = {}; 
+
+        function switchTab(targetTabId) {
+            if ((targetTabId === 'create' || targetTabId === 'dashboard') && !authState.isLoggedIn) {
+                showNotification("Please sign in first.", "error");
+                switchTab('login');
+                return;
+            }
+
+            const tabButtons = ['login', 'create', 'dashboard'];
+            tabButtons.forEach(tab => {
+                const button = document.getElementById(`tab-${tab}-btn`);
+                if (tab === targetTabId) {
+                    button.classList.add('active', 'text-white');
+                    button.classList.remove('text-neutral-400');
+                } else {
+                    button.classList.remove('active', 'text-white');
+                    button.classList.add('text-neutral-400');
+                }
+            });
+
+            tabButtons.forEach(tab => {
+                const panel = document.getElementById(`panel-${tab}`);
+                
+                if (tabTimeouts[tab]) clearTimeout(tabTimeouts[tab]);
+
+                if (tab === targetTabId) {
+                    panel.classList.remove('hidden');
+                    void panel.offsetHeight; 
+                    panel.classList.remove('hidden-state');
+                    panel.classList.add('active-state');
+                } else {
+                    panel.classList.add('hidden-state');
+                    panel.classList.remove('active-state');
+                    tabTimeouts[tab] = setTimeout(() => {
+                        if (panel.classList.contains('hidden-state')) {
+                            panel.classList.add('hidden');
+                        }
+                    }, 300);
+                }
+            });
+        }
+
+        function triggerAssetCreation() {
+            const assetName = document.getElementById('asset-name').value || 'New Product';
+            const price = document.getElementById('asset-price').value;
+            
+            const orb = document.getElementById('preview-orb');
+            orb.className = "w-14 h-14 rounded-full shadow-glow relative animate-bounce duration-[3000ms] flex items-center justify-center transition-all duration-500";
+            
+            if (price === 'free') {
+                orb.classList.add('bg-gradient-to-tr', 'from-zinc-600', 'via-neutral-400', 'to-white');
+            } else if (price === 'tier1') {
+                orb.classList.add('bg-gradient-to-tr', 'from-purple-600', 'via-indigo-500', 'to-white');
+            } else if (price === 'tier2') {
+                orb.classList.add('bg-gradient-to-tr', 'from-blue-600', 'via-cyan-400', 'to-white');
+            }
+
+            showNotification(`Creating ${assetName}...`, "info");
+            
+            setTimeout(() => {
+                showNotification(`Created ${assetName}.`, "success");
+                addSystemLog(`Created product: ${assetName}`);
+            }, 1200);
+        }
+
+        function addSystemLog(text) {
+            const container = document.getElementById('logs-container');
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            const logItem = document.createElement('div');
+            logItem.className = 'flex items-start gap-2 text-xs border-b border-white/[0.02] pb-1';
+            logItem.innerHTML = `
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5"></span>
+                <div class="flex-1">
+                    <p class="text-neutral-300">${text}</p>
+                    <span class="text-[9px] text-neutral-500">${timeStr}</span>
+                </div>
+            `;
+            container.prepend(logItem);
+        }
+
+        function clearSystemLogs() {
+            document.getElementById('logs-container').innerHTML = '';
+            showNotification("Activity cleared.", "warning");
+        }
+
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+        let stars = [];
+        const numStars = 110;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initStars();
+        }
+
+        function initStars() {
+            stars = [];
+            for (let i = 0; i < numStars; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: Math.random() * 1.5 + 0.3,
+                    opacity: Math.random(),
+                    speedX: (Math.random() - 0.5) * 0.15,
+                    speedY: (Math.random() - 0.5) * 0.15,
+                });
+            }
+        }
+
+        function animateStars() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            stars.forEach(star => {
+                star.x += star.speedX;
+                star.y += star.speedY;
+
+                if (star.x < 0) star.x = canvas.width;
+                if (star.x > canvas.width) star.x = 0;
+                if (star.y < 0) star.y = canvas.height;
+                if (star.y > canvas.height) star.y = 0;
+
+                star.opacity += (Math.random() - 0.5) * 0.02;
+                if (star.opacity < 0.1) star.opacity = 0.1;
+                if (star.opacity > 1) star.opacity = 1;
+
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+                ctx.shadowBlur = 4;
+                ctx.fill();
+            });
+
+            requestAnimationFrame(animateStars);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        const mouseGlow = document.getElementById('mouse-glow');
+        let currentMouseX = window.innerWidth / 2;
+        let currentMouseY = window.innerHeight / 2;
+        let targetMouseX = currentMouseX;
+        let targetMouseY = currentMouseY;
+
+        window.addEventListener('mousemove', (e) => {
+            targetMouseX = e.clientX;
+            targetMouseY = e.clientY;
+        });
+
+        function updateMouseGlowPosition() {
+            currentMouseX += (targetMouseX - currentMouseX) * 0.08;
+            currentMouseY += (targetMouseY - currentMouseY) * 0.08;
+            
+            mouseGlow.style.left = `${currentMouseX}px`;
+            mouseGlow.style.top = `${currentMouseY}px`;
+            
+            requestAnimationFrame(updateMouseGlowPosition);
+        }
+
+        window.onload = function() {
+            resizeCanvas();
+            animateStars();
+            updateMouseGlowPosition();
+            
+            showNotification("Ready.", "success");
+        }
+    </script>
+</body>
+</html>

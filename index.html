@@ -108,25 +108,25 @@
                         <i class="fa-solid fa-cube text-xl text-neutral-300"></i>
                     </div>
                     <h2 class="text-2xl font-bold tracking-tight text-white mb-2">Welcome to SellHub</h2>
-                    <p class="text-sm text-neutral-400">Sign in to manage your account.</p>
+                    <p class="text-sm text-neutral-400" id="login-subtitle">Sign in to manage your account.</p>
                 </div>
 
                 <div id="auth-logged-out" class="space-y-4">
-                    <button onclick="handleGitHubLogin()" class="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-neutral-200 transition-all duration-300 font-medium py-3 px-4 rounded-xl shadow-lg hover:shadow-white/10 active:scale-[0.98]">
+                    <button onclick="handleGitHubLogin()" id="github-login-btn" class="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-neutral-200 transition-all duration-300 font-medium py-3 px-4 rounded-xl shadow-lg hover:shadow-white/10 active:scale-[0.98]">
                         <i class="fa-brands fa-github text-xl"></i>
-                        <span>Sign in with GitHub</span>
+                        <span id="github-btn-text">Sign in with GitHub</span>
                     </button>
                 </div>
 
                 <div id="auth-logged-in" class="hidden space-y-6">
                     <div class="flex items-center gap-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                        <img id="user-avatar" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=150&auto=format&fit=crop" class="w-12 h-12 rounded-full border border-white/20 object-cover" alt="User Avatar">
+                        <img id="user-avatar" src="" class="w-12 h-12 rounded-full border border-white/20 object-cover" alt="User Avatar">
                         <div>
                             <div class="flex items-center gap-1.5">
-                                <h3 id="user-name" class="font-bold text-white text-sm">Developer</h3>
+                                <h3 id="user-name" class="font-bold text-white text-sm"></h3>
                                 <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">PRO</span>
                             </div>
-                            <p id="user-username" class="text-xs text-neutral-400">@github_user</p>
+                            <p id="user-username" class="text-xs text-neutral-400"></p>
                         </div>
                     </div>
 
@@ -360,15 +360,12 @@
     </main>
 
     <script>
+        const GITHUB_CLIENT_ID = "YOUR_GITHUB_CLIENT_ID";
+
         let authState = {
             isLoggedIn: false,
             user: null
         };
-
-        const mockUsers = [
-            { name: "John Doe", username: "johndoe", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop" },
-            { name: "Jane Smith", username: "janesmith", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=150&auto=format&fit=crop" }
-        ];
 
         function showNotification(message, type = 'info') {
             const container = document.getElementById('toast-container');
@@ -410,40 +407,62 @@
         }
 
         function handleGitHubLogin() {
-            showNotification("Connecting...", "info");
-            
-            const enableRealOAuth = false;
-            if (enableRealOAuth) {
-                window.location.href = "https://github.com/login/oauth/authorize?client_id=YOUR_CLIENT_ID_HERE&scope=user";
-                return;
+            const redirectUri = window.location.origin;
+            window.location.href = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${redirectUri}&scope=read:user`;
+        }
+
+        async function processGitHubCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+
+            if (code) {
+                document.getElementById('github-btn-text').innerText = "Authenticating...";
+                document.getElementById('github-login-btn').disabled = true;
+
+                try {
+                    const response = await fetch('/api/auth/github', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.user) {
+                        loginUser(data.user);
+                    } else {
+                        throw new Error(data.error || "Failed to authenticate");
+                    }
+                } catch (err) {
+                    showNotification(err.message, "error");
+                    document.getElementById('github-btn-text').innerText = "Sign in with GitHub";
+                    document.getElementById('github-login-btn').disabled = false;
+                } finally {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
             }
+        }
 
-            const selectedUser = mockUsers[Math.floor(Math.random() * mockUsers.length)];
+        function loginUser(userData) {
+            authState.isLoggedIn = true;
+            authState.user = userData;
             
-            setTimeout(() => {
-                authState.isLoggedIn = true;
-                authState.user = selectedUser;
-                
-                document.getElementById('auth-logged-out').classList.add('hidden');
-                document.getElementById('auth-logged-in').classList.remove('hidden');
-                
-                document.getElementById('user-name').innerText = selectedUser.name;
-                document.getElementById('user-username').innerText = `@${selectedUser.username}`;
-                document.getElementById('user-avatar').src = selectedUser.avatar;
-                
-                document.getElementById('login-tab-label').innerText = "Account";
-                
-                document.getElementById('create-lock-icon').classList.add('hidden');
-                document.getElementById('dashboard-lock-icon').classList.add('hidden');
+            document.getElementById('auth-logged-out').classList.add('hidden');
+            document.getElementById('auth-logged-in').classList.remove('hidden');
+            
+            document.getElementById('user-name').innerText = userData.name;
+            document.getElementById('user-username').innerText = `@${userData.username}`;
+            document.getElementById('user-avatar').src = userData.avatar;
+            
+            document.getElementById('login-tab-label').innerText = "Account";
+            
+            document.getElementById('create-lock-icon').classList.add('hidden');
+            document.getElementById('dashboard-lock-icon').classList.add('hidden');
 
-                showNotification(`Signed in as @${selectedUser.username}.`, "success");
-                addSystemLog(`User logged in.`);
+            showNotification(`Signed in as @${userData.username}.`, "success");
+            addSystemLog(`User logged in.`);
 
-                setTimeout(() => {
-                    switchTab('create');
-                }, 1000);
-
-            }, 1500);
+            setTimeout(() => switchTab('create'), 500);
         }
 
         function handleLogout() {
@@ -634,7 +653,7 @@
             animateStars();
             updateMouseGlowPosition();
             
-            showNotification("Ready.", "success");
+            processGitHubCallback();
         }
     </script>
 </body>
